@@ -99,11 +99,15 @@ while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
         app_name=$(basename "$app_dir")
         echo "    Processing app: $app_name"
         
+        package_updated=false
+        middleware_updated=false
+        
         # Step 5: Update package.json if it exists
         if [[ -f "$app_dir/package.json" ]]; then
             if grep -q '"next": "14.2.1",' "$app_dir/package.json"; then
                 echo "      Updating Next.js version in $app_name/package.json"
                 sed -i 's/"next": "14.2.1",/"next": "14.2.20",/g' "$app_dir/package.json"
+                package_updated=true
                 changes_made=true
             else
                 echo "INFO: $repo_name/$app_name - package.json exists but 'next': '14.2.1' not found (may already be updated or on different version)" >> "$LOG_FILE"
@@ -112,8 +116,6 @@ while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
         
         # Step 6-7: Update middleware.ts if it exists
         if [[ -f "$app_dir/middleware.ts" ]]; then
-            middleware_updated=false
-            
             # Step 6: Make middleware function async
             if grep -q "export function middleware(request: NextRequest) {" "$app_dir/middleware.ts"; then
                 echo "      Making middleware function async in $app_name/middleware.ts"
@@ -133,12 +135,28 @@ while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
             if [[ "$middleware_updated" == false ]]; then
                 echo "INFO: $repo_name/$app_name - middleware.ts exists but expected strings not found" >> "$LOG_FILE"
             fi
+        else
+            echo "APP STATUS: $repo_name/$app_name - no middleware - middleware.ts file not found" >> "$LOG_FILE"
+        fi
+        
+        if [[ "$package_updated" == true && "$middleware_updated" == true ]]; then
+            echo "APP STATUS: $repo_name/$app_name - success - middleware and package updated" >> "$LOG_FILE"
+        elif [[ "$package_updated" == true && "$middleware_updated" == false ]]; then
+            if [[ -f "$app_dir/middleware.ts" ]]; then
+                echo "APP STATUS: $repo_name/$app_name - partial - package updated, middleware not updated" >> "$LOG_FILE"
+            else
+                echo "APP STATUS: $repo_name/$app_name - partial - package updated, no middleware file" >> "$LOG_FILE"
+            fi
+        elif [[ "$package_updated" == false && "$middleware_updated" == true ]]; then
+            echo "APP STATUS: $repo_name/$app_name - partial - middleware updated, package not updated" >> "$LOG_FILE"
+        elif [[ -f "$app_dir/package.json" || -f "$app_dir/middleware.ts" ]]; then
+            echo "APP STATUS: $repo_name/$app_name - no changes - files exist but no updates needed" >> "$LOG_FILE"
         fi
     done
     
     # Step 8-9: Create branch, commit, push, and create PR if changes were made
     if [[ "$changes_made" == true ]]; then
-        branch_name="chore/update-next-and-async-middleware-$(date +%Y%m%d-%H%M%S)"
+        branch_name="chore/TRUSPD-416/update-next-and-async-middleware"
         
         echo "  Creating branch: $branch_name"
         if ! git checkout -b "$branch_name"; then
