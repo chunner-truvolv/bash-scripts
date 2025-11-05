@@ -50,6 +50,11 @@ mkdir -p all-repos
 while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
     # Skip empty lines and comments
     [[ -z "$repo_name" || "$repo_name" =~ ^[[:space:]]*# ]] && continue
+
+    if [[ $apps_fixed -ge $BATCH_SIZE ]]; then
+        echo -e "${GREEN}Batch limit of $BATCH_SIZE apps reached. Stopping.${NC}"
+        break
+    fi
     
     echo -e "${YELLOW}Processing: $repo_name (Fixed: $apps_fixed/$BATCH_SIZE)${NC}"
     
@@ -296,9 +301,9 @@ EOF
             core_event_page_updated=true
             changes_made=true
         else
-            echo "Creating Core Events page file in $app_name/events/[...slug]/page.tsx"
-            mkdir -p "$app_dir/events/[...slug]"
-            cat > "$app_dir/events/[...slug]/page.tsx" << 'EOF'
+            echo "Creating Core Events page file in $app_name/app/events/[...slug]/page.tsx"
+            mkdir -p "$app_dir/app/events/[...slug]"
+            cat > "$app_dir/app/events/[...slug]/page.tsx" << 'EOF'
 import { CoreEvent } from "@truvolv/orson-seelib/components/event";
 import { generateStaticEventParams } from "@truvolv/orson-seelib/lib/generateStaticEventParams";
 import { generateEventMeta } from "@truvolv/orson-seelib/lib/generateEventMeta";
@@ -408,7 +413,7 @@ EOF
     # Step 8-9: Create branch, commit, push, and create PR if changes were made
     if [[ "$changes_made" == true ]]; then
         # Comment out lines 422 - 438 once tested and ready to push to main
-        branch_name="chore/TRUSPD-587/update-api-route-404-component-core-events-page"
+        branch_name="chore/TRUSPD-587/update-api-route-404-page-core-events-page"
         
         echo "  Cleaning up git references..."
         git fetch --prune origin 2>/dev/null || true

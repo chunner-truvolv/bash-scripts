@@ -50,6 +50,11 @@ mkdir -p all-repos
 while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
     # Skip empty lines and comments
     [[ -z "$repo_name" || "$repo_name" =~ ^[[:space:]]*# ]] && continue
+
+    if [[ $apps_fixed -ge $BATCH_SIZE ]]; then
+        echo -e "${GREEN}Batch limit of $BATCH_SIZE apps reached. Stopping.${NC}"
+        break
+    fi
     
     echo -e "${YELLOW}Processing: $repo_name (Fixed: $apps_fixed/$BATCH_SIZE)${NC}"
     
