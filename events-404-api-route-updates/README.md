@@ -1,6 +1,6 @@
 ## 🧩 Repository Batch Updater Script
 
-This script was written for batch updates across our member repos. In this instance, the intent was to update the NextJS version and to make the middleware asynchronous.
+This script was written for batch updates across our member repos. In this instance, the intent was to update the API routes from Orson-Seelib, use a 404 page component from Orson-Seelib, and add an Events page route for the Events collection.\
 
 ### 🚀 What It Does
 

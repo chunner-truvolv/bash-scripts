@@ -11,6 +11,7 @@ LOG_FILE="$SCRIPT_DIR/logs.csv"
 ERROR_FILE="$SCRIPT_DIR/error.csv"
 PR_LINKS_FILE="$SCRIPT_DIR/pr-links.txt"
 LOG_TRACKING_FILE="$SCRIPT_DIR/logs.txt"
+MANUAL_UPDATE_FILE="$SCRIPT_DIR/manual-update.txt"
 
 BATCH_SIZE=${1:-5}
 echo -e "${YELLOW}Batch size set to: $BATCH_SIZE apps${NC}"
@@ -62,7 +63,7 @@ while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
     
     # Step 2: Clone repo if not present
     if [[ ! -d "$repo_dir" ]]; then
-        echo "  Cloning $repo_name..."
+        echo "Cloning $repo_name..."
         if ! gh repo clone "$repo_name" "$repo_dir"; then
             echo -e "${RED}  Failed to clone $repo_name${NC}"
             echo "\"$repo_name\",\"clone-failed\",\"Could not clone repository\"" >> "$ERROR_FILE"
@@ -127,7 +128,9 @@ while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
         app_name=$(basename "$app_dir")
         echo "    Processing app: $app_name"
         echo "    App Directory: $app_dir"
-        
+
+        needs_manual_update=false
+
         api_route_updated=false
         page_404_updated=false
         page_404_created=false
@@ -161,14 +164,16 @@ while IFS= read -r repo_name || [[ -n "$repo_name" ]]; do
 
         if [[ "$api_route_already_updated" == true && "$page_404_already_updated" == true && "$core_event_page_already_updated" == true ]]; then
             echo "\"$repo_name\",\"$app_name\",\"completed\",\"already updated (not counted toward batch)\",\"\"" >> "$LOG_FILE"
-            echo "App already has all three updates, skipping..."
+            echo "      App already has all three updates, skipping..."
             continue
         fi
         
-        # Step 5: Update API route, the route should exist
+        # Step 5: Update API route if no custom member edits have been made to the file, the route should exist
         if [[ -f "$app_dir/app/api/[...slug]/route.ts" ]]; then
-            echo "Updating API route in $app_name/app/api/[...slug]/route.ts"
-            # Replace all content with new API route content
+        if grep -q "import { GET } from \"@truvolv/orson-seelib/api/router\";" "$app_dir/app/api/[...slug]/route.ts" && \
+        grep -q "export { GET };" "$app_dir/app/api/[...slug]/route.ts"; then
+            echo "      Updating API route in $app_name/app/api/[...slug]/route.ts"
+                # Replace all content with new API route content
 
             cat > "$app_dir/app/api/[...slug]/route.ts" << 'EOF'
 // exporting all route handlers from orson-seelib
@@ -177,11 +182,21 @@ export * from "@truvolv/orson-seelib/api/router";
 EOF
             api_route_updated=true
             changes_made=true
+
+            else
+                echo "      Skipping API route update in $app_name/app/api/[...slug]/route.ts - custom member edits detected"
+                echo "\"$repo_name\",\"manual-update-required\",\"Custom member edits detected in /app/api/[...slug]/route.ts\"" >> "$MANUAL_UPDATE_FILE"
+
+                needs_manual_update=true
+                api_route_updated=false
+                changes_made=false
+                
+            fi
         fi
 
         # Step 6: Update 404 page if it exists, else create it
         if [[ -f "$app_dir/not-found.tsx" ]]; then
-            echo "Updating 404 page in $app_name/not-found.tsx"
+            echo "      Updating 404 page in $app_name/not-found.tsx"
             # Replace all content with new 404 page content
 
             cat > "$app_dir/not-found.tsx" << 'EOF'
@@ -216,7 +231,7 @@ EOF
             page_404_updated=true
             changes_made=true
         else
-            echo "Creating 404 page file in $app_name/not-found.tsx"
+            echo "      Creating 404 page file in $app_name/not-found.tsx"
             cat > "$app_dir/not-found.tsx" << 'EOF'
 import { Metadata } from "next";
 import { generate404PageMeta } from "@truvolv/orson-seelib/lib/generate404PageMeta";
@@ -249,59 +264,14 @@ EOF
             changes_made=true
         fi
         
-        # Step 7: Update Core Events page if it exists, else create it
+        # Step 7: Only create Core Events page if it doesn't exist
         if [[ -f "$app_dir/app/events/[...slug]/page.tsx" ]]; then
-            echo "Updating Core Events page in $app_name/app/events/[...slug]/page.tsx"
-            # Replace content with new Core Events page content
-            mkdir -p "$app_dir/app/events/[...slug]"
-            cat > "$app_dir/app/events/[...slug]/page.tsx" << 'EOF'
-import { CoreEvent } from "@truvolv/orson-seelib/components/event";
-import { generateStaticEventParams } from "@truvolv/orson-seelib/lib/generateStaticEventParams";
-import { generateEventMeta } from "@truvolv/orson-seelib/lib/generateEventMeta";
-import { Metadata } from "next";
-
-export async function generateMetadata({
-params,
-}: {
-params: { slug: string | string[] };
-}): Promise<Metadata> {
-try {
-    const result = generateEventMeta({ params });
-    return result;
-} catch (error) {
-    console.error("Error generating metadata:", error);
-    throw error;
-}
-}
-
-export async function generateStaticParams() {
-try {
-    const result = generateStaticEventParams();
-    return result;
-} catch (error) {
-    console.error("Error generating static event params:", error);
-    throw error;
-}
-}
-
-export default async function Event({
-params,
-}: {
-params: { slug: string | string[] };
-}) {
-return (
-    <>
-    <CoreEvent slug={params.slug} />
-    </>
-);
-}
-EOF
-
+            echo "      Skipping update, Core Events page in $app_name/app/events/[...slug]/page.tsx already exists"
             
-            core_event_page_updated=true
-            changes_made=true
+            core_event_page_updated=false
+            changes_made=false
         else
-            echo "Creating Core Events page file in $app_name/app/events/[...slug]/page.tsx"
+            echo "      Creating Core Events page file in $app_name/app/events/[...slug]/page.tsx"
             mkdir -p "$app_dir/app/events/[...slug]"
             cat > "$app_dir/app/events/[...slug]/page.tsx" << 'EOF'
 import { CoreEvent } from "@truvolv/orson-seelib/components/event";
@@ -366,7 +336,6 @@ EOF
         else
             # Partial updates - build detailed notes
             status="partial"
-            notes="Updates:"
             if [[ "$api_route_updated" == true ]]; then
                 notes="$notes API route updated,"
             else
@@ -389,13 +358,17 @@ EOF
             notes="${notes%,}"  # Remove trailing comma
         fi
 
-        echo "\"$repo_name\",\"$app_name\",\"$status\",\"$notes\",\"\"" >> "$LOG_FILE"
+        if [[ "$needs_manual_update" == true ]]; then
+            echo "\"$repo_name\",\"$app_name\",\"$status, needs manual update\",\"$notes\",\"\"" >> "$LOG_FILE"
+        else
+            echo "\"$repo_name\",\"$app_name\",\"$status\",\"$notes\",\"\"" >> "$LOG_FILE"
+        fi
 
         # Count toward batch only if all three components were successfully processed
         if [[ "$api_route_updated" == true && ("$page_404_updated" == true || "$page_404_created" == true) && ("$core_event_page_updated" == true || "$core_event_page_created" == true) ]]; then
             ((apps_fixed++))
             echo "APP STATUS: $repo_name/$app_name - $status - $notes" >> "$LOG_TRACKING_FILE"
-            echo "App fixed! Total fixed: $apps_fixed"
+            echo "    App fixed! Total fixed: $apps_fixed"
         fi
     done
     
@@ -460,6 +433,8 @@ EOF
             - API route to include all handlers from orson-seelib
             - 404 page skeleton to use NotFoundPage component from orson-seelib
             - Events page to display separate events page using CoreEvent component from orson-seelib
+
+            Ticket: https://truvolv-company.monday.com/item/TRUSPD-583
 
             This is an automated update across multiple repositories." \
             --head "$branch_name" 2>&1)
