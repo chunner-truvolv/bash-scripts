@@ -11,14 +11,15 @@ LOG_FILE="$SCRIPT_DIR/logs.csv"
 ERROR_FILE="$SCRIPT_DIR/error.csv"
 PR_LINKS_FILE="$SCRIPT_DIR/pr-links.txt"
 LOG_TRACKING_FILE="$SCRIPT_DIR/logs.txt"
-MANUAL_UPDATE_FILE="$SCRIPT_DIR/manual-update.txt"
+MANUAL_UPDATE_FILE="$SCRIPT_DIR/manual-updates.csv"
 
 BATCH_SIZE=${1:-5}
 echo -e "${YELLOW}Batch size set to: $BATCH_SIZE apps${NC}"
 
 echo "Repo,App,Status,Notes,PR Link" > "$LOG_FILE"
 echo "Repo,Issue,Details" > "$ERROR_FILE"
-echo -e "${GREEN}Created new logs.csv and error.csv files${NC}"
+echo "Repo,App,Status,Notes" > "$MANUAL_UPDATE_FILE"
+echo -e "${GREEN}Created new logs.csv, error.csv, and manual-updates.csv files${NC}"
 
 apps_fixed=0
 
@@ -185,7 +186,7 @@ EOF
 
             else
                 echo "      Skipping API route update in $app_name/app/api/[...slug]/route.ts - custom member edits detected"
-                echo "\"$repo_name\",\"manual-update-required\",\"Custom member edits detected in /app/api/[...slug]/route.ts\"" >> "$MANUAL_UPDATE_FILE"
+                echo "\"$repo_name\",\"$app_name\",\"manual-update-required\",\"Custom member edits detected in /app/api/[...slug]/route.ts\"" >> "$MANUAL_UPDATE_FILE"
 
                 needs_manual_update=true
                 api_route_updated=false
@@ -384,89 +385,88 @@ EOF
     fi
 
     # Step 8-9: Create branch, commit, push, and create PR if changes were made
-    if [[ "$changes_made" == true ]]; then
-        # Comment out lines 422 - 438 once tested and ready to push to main
-        branch_name="chore/TRUSPD-587/update-api-route-404-page-core-events-page"
+    # if [[ "$changes_made" == true ]]; then
+    #     # Comment out lines for Step #8-9 once tested and ready to push to main
+    #     branch_name="chore/TRUSPD-587/update-api-route-404-page-core-events-page"
         
-        echo "  Cleaning up git references..."
-        git fetch --prune origin 2>/dev/null || true
+    #     echo "  Cleaning up git references..."
+    #     git fetch --prune origin 2>/dev/null || true
         
-        echo "  Creating branch: $branch_name"
-        if ! git checkout -b "$branch_name" 2>/dev/null; then
-            echo -e "${YELLOW}  Branch creation failed (likely already exists), discarding local changes${NC}"
-            echo "\"$repo_name\",\"branch-exists\",\"Branch creation failed, likely already exists - local changes discarded\"" >> "$ERROR_FILE"
+    #     echo "  Creating branch: $branch_name"
+    #     if ! git checkout -b "$branch_name" 2>/dev/null; then
+    #         echo -e "${YELLOW}  Branch creation failed (likely already exists), discarding local changes${NC}"
+    #         echo "\"$repo_name\",\"branch-exists\",\"Branch creation failed, likely already exists - local changes discarded\"" >> "$ERROR_FILE"
             
-            # Reset any local changes
-            git reset --hard HEAD
-            git clean -fd
+    #         # Reset any local changes
+    #         git reset --hard HEAD
+    #         git clean -fd
             
-            cd - > /dev/null
-            continue
-        fi
+    #         cd - > /dev/null
+    #         continue
+    #     fi
         
-        echo "  Committing changes..."
-        git add .
-        if ! git commit -m "Update API route to include all handlers from orson-seelib, update or create 404 page skeleton, and update or create core events page"; then
-            echo -e "${RED}  Failed to commit changes${NC}"
-            echo "\"$repo_name\",\"commit-failed\",\"Could not commit changes\"" >> "$ERROR_FILE"
-            cd - > /dev/null
-            continue
-        fi
+    #     echo "  Committing changes..."
+    #     git add .
+    #     if ! git commit -m "Update API route to include all handlers from orson-seelib, update or create 404 page skeleton, and update or create core events page"; then
+    #         echo -e "${RED}  Failed to commit changes${NC}"
+    #         echo "\"$repo_name\",\"commit-failed\",\"Could not commit changes\"" >> "$ERROR_FILE"
+    #         cd - > /dev/null
+    #         continue
+    #     fi
         
-        echo "  Pushing branch..."
-        # Comment out line 451 and uncomment next line once tested to push without PR creation
-        if ! git push origin "$branch_name"; then
-        # if ! git push; then
+    #     echo "  Pushing branch..."
+    #     # Comment out line 451 and uncomment next line once tested to push without PR creation
+    #     if ! git push origin "$branch_name"; then
+    #     # if ! git push; then
 
-            echo -e "${RED}  Failed to push branch${NC}"
-            echo "\"$repo_name\",\"push-failed\",\"Could not push branch $branch_name\"" >> "$ERROR_FILE"
-            cd - > /dev/null
-            continue
-        fi
+    #         echo -e "${RED}  Failed to push branch${NC}"
+    #         echo "\"$repo_name\",\"push-failed\",\"Could not push branch $branch_name\"" >> "$ERROR_FILE"
+    #         cd - > /dev/null
+    #         continue
+    #     fi
         
-        # Comment out lines 461 - 493 once tested and ready to push straight to main
-        echo "  Creating PR..."
-        pr_url=$(gh pr create \
-            --title "Update API route, 404 page, and core events page" \
-            --body "This PR updates:
+    #     echo "  Creating PR..."
+    #     pr_url=$(gh pr create \
+    #         --title "Update API route, 404 page, and core events page" \
+    #         --body "This PR updates:
 
-            - API route to include all handlers from orson-seelib
-            - 404 page skeleton to use NotFoundPage component from orson-seelib
-            - Events page to display separate events page using CoreEvent component from orson-seelib
+    #         - API route to include all handlers from orson-seelib
+    #         - 404 page skeleton to use NotFoundPage component from orson-seelib
+    #         - Events page to display separate events page using CoreEvent component from orson-seelib
 
-            Ticket: https://truvolv-company.monday.com/item/TRUSPD-583
+    #         Ticket: https://truvolv-company.monday.com/item/TRUSPD-583
 
-            This is an automated update across multiple repositories." \
-            --head "$branch_name" 2>&1)
+    #         This is an automated update across multiple repositories." \
+    #         --head "$branch_name" 2>&1)
 
-        if [[ $? -eq 0 ]]; then
-            echo -e "${GREEN}  ✓ PR created successfully${NC}"
+    #     if [[ $? -eq 0 ]]; then
+    #         echo -e "${GREEN}  ✓ PR created successfully${NC}"
             
-            # Add to PR links file
-            echo "$repo_name: $pr_url" >> "$PR_LINKS_FILE"
+    #         # Add to PR links file
+    #         echo "$repo_name: $pr_url" >> "$PR_LINKS_FILE"
             
-            # Update the CSV with PR URL for successful app updates
-            temp_file=$(mktemp)
-            while IFS= read -r line; do
-                if [[ "$line" == *"\"$repo_name\","*"\",\"success\","* ]]; then
-                    # Replace the empty PR link with the actual URL
-                    echo "${line%,\"\"*},\"$pr_url\"" >> "$temp_file"
-                else
-                    echo "$line" >> "$temp_file"
-                fi
-            done < "$LOG_FILE"
-            mv "$temp_file" "$LOG_FILE"
-        else
-            echo -e "${RED}  Failed to create PR${NC}"
-            echo "\"$repo_name\",\"pr-failed\",\"Could not create pull request\"" >> "$ERROR_FILE"
-        fi
-    else
-        echo -e "${YELLOW}  No changes needed${NC}"
-        echo "\"$repo_name\",\"no-changes\",\"Repository processed but no changes were needed\"" >> "$ERROR_FILE"
-    fi
+    #         # Update the CSV with PR URL for successful app updates
+    #         temp_file=$(mktemp)
+    #         while IFS= read -r line; do
+    #             if [[ "$line" == *"\"$repo_name\","*"\",\"success\","* ]]; then
+    #                 # Replace the empty PR link with the actual URL
+    #                 echo "${line%,\"\"*},\"$pr_url\"" >> "$temp_file"
+    #             else
+    #                 echo "$line" >> "$temp_file"
+    #             fi
+    #         done < "$LOG_FILE"
+    #         mv "$temp_file" "$LOG_FILE"
+    #     else
+    #         echo -e "${RED}  Failed to create PR${NC}"
+    #         echo "\"$repo_name\",\"pr-failed\",\"Could not create pull request\"" >> "$ERROR_FILE"
+    #     fi
+    # else
+    #     echo -e "${YELLOW}  No changes needed${NC}"
+    #     echo "\"$repo_name\",\"no-changes\",\"Repository processed but no changes were needed\"" >> "$ERROR_FILE"
+    # fi
     
-    cd - > /dev/null
-    echo ""
+    # cd - > /dev/null
+    # echo ""
     
 done < "$REPO_LIST_FILE"
 
